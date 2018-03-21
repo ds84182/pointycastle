@@ -7,10 +7,9 @@ library pointycastle.impl.signer.ecdsa_signer;
 import "dart:typed_data";
 import "dart:math";
 
-import 'package:bignum/bignum.dart';
-
 import "package:pointycastle/api.dart";
 import "package:pointycastle/ecc/api.dart";
+import 'package:pointycastle/src/bigint_util.dart';
 import "package:pointycastle/src/registry/registry.dart";
 
 class ECDSASigner implements Signer {
@@ -92,10 +91,10 @@ class ECDSASigner implements Signer {
 
     var n = _pvkey.parameters.n;
     var e = _calculateE(n, message);
-    var r = null;
-    var s = null;
+    BigInt r;
+    BigInt s;
 
-    var kCalculator;
+    _KCalculator kCalculator;
     if (_kMac != null) {
       kCalculator = new _RFC6979KCalculator(_kMac, n, _pvkey.d, message);
     } else {
@@ -104,7 +103,7 @@ class ECDSASigner implements Signer {
 
     // 5.3.2
     do {// generate s
-      var k = null;
+      BigInt k;
 
       do { // generate r
         k = kCalculator.nextK();
@@ -115,13 +114,13 @@ class ECDSASigner implements Signer {
         var x = p.x.toBigInteger();
 
         r = x%n;
-      } while( r==BigInteger.ZERO );
+      } while( r.sign == 0 );
 
       var d = _pvkey.d;
 
       s = (k.modInverse(n)*(e+(d*r)))%n;
 
-    } while( s==BigInteger.ZERO );
+    } while( s.sign == 0 );
 
     return new ECSignature(r,s);
   }
@@ -136,19 +135,19 @@ class ECDSASigner implements Signer {
     var s = signature.s;
 
     // r in the range [1,n-1]
-    if( r.compareTo(BigInteger.ONE) < 0 || r.compareTo(n) >= 0 ) {
+    if( r.compareTo(BigInt.one) < 0 || r.compareTo(n) >= 0 ) {
       return false;
     }
 
     // s in the range [1,n-1]
-    if( s.compareTo(BigInteger.ONE) < 0 || s.compareTo(n) >= 0 ) {
+    if( s.compareTo(BigInt.one) < 0 || s.compareTo(n) >= 0 ) {
       return false;
     }
 
     var c = s.modInverse(n);
 
-    var u1 = e.multiply(c).mod(n);
-    var u2 = r.multiply(c).mod(n);
+    var u1 = (e * c) % n;
+    var u2 = (r * c) % n;
 
     var G = _pbkey.parameters.G;
     var Q = _pbkey.Q;
@@ -160,7 +159,7 @@ class ECDSASigner implements Signer {
       return false;
     }
 
-    var v = point.x.toBigInteger().mod(n);
+    var v = point.x.toBigInteger() % n;
 
     return v==r;
   }
@@ -174,14 +173,14 @@ class ECDSASigner implements Signer {
     }
   }
 
-  BigInteger _calculateE(BigInteger n, Uint8List message) {
-    var log2n = n.bitLength();
+  BigInt _calculateE(BigInt n, Uint8List message) {
+    var log2n = n.bitLength;
     var messageBitLength = message.length * 8;
 
     if( log2n >= messageBitLength ) {
-      return new BigInteger.fromBytes( 1, message );
+      return BigIntUtil.fromBytes( 1, message );
     } else {
-      BigInteger trunc = new BigInteger.fromBytes(1, message);
+      BigInt trunc = BigIntUtil.fromBytes(1, message);
 
       trunc = trunc >> (messageBitLength - log2n);
 
@@ -189,7 +188,7 @@ class ECDSASigner implements Signer {
     }
   }
 
-  ECPoint _sumOfTwoMultiplies( ECPoint P, BigInteger a, ECPoint Q, BigInteger b ) {
+  ECPoint _sumOfTwoMultiplies( ECPoint P, BigInt a, ECPoint Q, BigInt b ) {
     ECCurve c = P.curve;
 
     if( c!=Q.curve ) {
@@ -209,8 +208,8 @@ class ECDSASigner implements Signer {
     return _implShamirsTrick(P, a, Q, b);
   }
 
-  ECPoint _implShamirsTrick(ECPoint P, BigInteger k, ECPoint Q, BigInteger l) {
-    int m = max(k.bitLength(), l.bitLength());
+  ECPoint _implShamirsTrick(ECPoint P, BigInt k, ECPoint Q, BigInt l) {
+    int m = max(k.bitLength, l.bitLength);
 
     ECPoint Z = P+Q;
     ECPoint R = P.curve.infinity;
@@ -218,14 +217,14 @@ class ECDSASigner implements Signer {
     for( int i=m-1 ; i>=0 ; --i ) {
       R = R.twice();
 
-      if( k.testBit(i) ) {
-        if( l.testBit(i) ) {
+      if( BigIntUtil.testBit(k, i) ) {
+        if( BigIntUtil.testBit(l, i) ) {
           R = R+Z;
         } else {
           R = R+P;
         }
       } else {
-        if (l.testBit(i)) {
+        if (BigIntUtil.testBit(l, i)) {
           R = R+Q;
         }
       }
@@ -236,29 +235,33 @@ class ECDSASigner implements Signer {
 
 }
 
-class _RFC6979KCalculator {
+abstract class _KCalculator {
+  BigInt nextK();
+}
+
+class _RFC6979KCalculator implements _KCalculator {
 
   Mac _mac;
   Uint8List _K;
   Uint8List _V;
-  BigInteger _n;
+  BigInt _n;
 
-  _RFC6979KCalculator(this._mac, this._n, BigInteger d, Uint8List message) {
+  _RFC6979KCalculator(this._mac, this._n, BigInt d, Uint8List message) {
     _V = new Uint8List(_mac.macSize);
     _K = new Uint8List(_mac.macSize);
     _init(d, message);
   }
 
-  void _init(BigInteger d, Uint8List message) {
+  void _init(BigInt d, Uint8List message) {
     _V.fillRange(0, _V.length, 0x01);
     _K.fillRange(0, _K.length, 0x00);
 
-    var x = new Uint8List((_n.bitLength() + 7) ~/ 8);
+    var x = new Uint8List((_n.bitLength + 7) ~/ 8);
     var dVal = _asUnsignedByteArray(d);
 
     x.setRange((x.length - dVal.length), x.length, dVal);
 
-    var m = new Uint8List((_n.bitLength() + 7) ~/ 8);
+    var m = new Uint8List((_n.bitLength + 7) ~/ 8);
 
     var mInt = _bitsToInt(message);
 
@@ -293,8 +296,9 @@ class _RFC6979KCalculator {
     _mac.doFinal(_V, 0);
   }
 
-  BigInteger nextK() {
-    var t = new Uint8List((_n.bitLength() + 7) ~/ 8);
+  @override
+  BigInt nextK() {
+    var t = new Uint8List((_n.bitLength + 7) ~/ 8);
 
     for (;;) {
       var tOff = 0;
@@ -328,41 +332,42 @@ class _RFC6979KCalculator {
     }
   }
 
-  BigInteger _bitsToInt(Uint8List t) {
-    var v = new BigInteger.fromBytes(1, t);
-    if ((t.length * 8) > _n.bitLength()) {
-      v = v >> ((t.length * 8) - _n.bitLength());
+  BigInt _bitsToInt(Uint8List t) {
+    var v = BigIntUtil.fromBytes(1, t);
+    if ((t.length * 8) > _n.bitLength) {
+      v = v >> ((t.length * 8) - _n.bitLength);
     }
 
     return v;
   }
 
 
-  Uint8List _asUnsignedByteArray(BigInteger value) {
-    var bytes = value.toByteArray();
+  Uint8List _asUnsignedByteArray(BigInt value) {
+    var bytes = BigIntUtil.toBytes(value);
 
     if (bytes[0] == 0) {
       return new Uint8List.fromList(bytes.sublist(1));
     } else {
-      return new Uint8List.fromList(bytes);
+      return bytes;
     }
   }
 
 }
 
-class _RandomKCalculator {
+class _RandomKCalculator implements _KCalculator {
 
-  BigInteger _n;
+  BigInt _n;
   SecureRandom _random;
 
   _RandomKCalculator(this._n, this._random);
 
-  BigInteger nextK() {
+  @override
+  BigInt nextK() {
     var k;
     do {
-      k = _random.nextBigInteger(_n.bitLength());
+      k = _random.nextBigInteger(_n.bitLength);
     }
-    while( k==BigInteger.ZERO || k>=_n );
+    while( k.sign == 0 || k>=_n );
     return k;
   }
 

@@ -31,8 +31,8 @@ abstract class SecureRandom extends Algorithm {
   /// Get four bytes long random int.
   int nextUint32();
 
-  /// Get a random [BigInteger] of [bitLength] bits.
-  BigInteger nextBigInteger(int bitLength);
+  /// Get a random [BigInt] of [bitLength] bits.
+  BigInt nextBigInteger(int bitLength);
 
   /// Get a list of bytes of arbitrary length.
   Uint8List nextBytes(int count);

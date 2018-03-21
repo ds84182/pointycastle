@@ -6,15 +6,15 @@ library pointycastle.impl.ecc.ecc_fp;
 
 import "dart:typed_data";
 
-import 'package:bignum/bignum.dart';
 import "package:pointycastle/api.dart";
 import "package:pointycastle/ecc/ecc_base.dart" hide ECFieldElementBase, ECPointBase, ECCurveBase;
 import "package:pointycastle/ecc/ecc_base.dart" as ecc;
+import 'package:pointycastle/src/bigint_util.dart';
 
 class ECFieldElement extends ecc.ECFieldElementBase {
 
-  final BigInteger q;
-  final BigInteger x;
+  final BigInt q;
+  final BigInt x;
 
   ECFieldElement( this.q, this.x ) {
     if( x >= q ) {
@@ -23,9 +23,9 @@ class ECFieldElement extends ecc.ECFieldElementBase {
   }
 
   String get fieldName => "Fp";
-  int get fieldSize => q.bitLength();
+  int get fieldSize => q.bitLength;
 
-  BigInteger toBigInteger() => x;
+  BigInt toBigInteger() => x;
 
   ECFieldElement operator +( ECFieldElement b ) => new ECFieldElement( q, (x + b.toBigInteger()) % q );
   ECFieldElement operator -( ECFieldElement b ) => new ECFieldElement( q, (x - b.toBigInteger()) % q );
@@ -35,7 +35,7 @@ class ECFieldElement extends ecc.ECFieldElementBase {
   ECFieldElement operator -() => new ECFieldElement( q, -x % q );
 
   ECFieldElement invert() => new ECFieldElement( q, x.modInverse(q) );
-  ECFieldElement square() => new ECFieldElement( q, x.modPow(BigInteger.TWO,q) );
+  ECFieldElement square() => new ECFieldElement( q, BigIntUtil.modPow(x, BigInt.two, q) );
 
   // D.1.4 91
   /**
@@ -44,27 +44,27 @@ class ECFieldElement extends ecc.ECFieldElementBase {
    */
   ECFieldElement sqrt() {
 
-     if( !q.testBit(0) ) {
+     if( !BigIntUtil.testBit(q, 0) ) {
        throw new UnimplementedError("Not implemented yet");
      }
 
      // p % 4 == 3
-     if( q.testBit(1) ) {
+     if( BigIntUtil.testBit(q, 1) ) {
        // z = g^(u+1) + p, p = 4u + 3
-       var z = new ECFieldElement( q, x.modPow( (q>>2) + BigInteger.ONE, q ) );
+       var z = new ECFieldElement( q, BigIntUtil.modPow( x, (q>>2) + BigInt.one, q ) );
        return z.square() == this ? z : null;
      }
 
      // p % 4 == 1
-     var qMinusOne = q - BigInteger.ONE;
+     var qMinusOne = q - BigInt.one;
 
      var legendreExponent = qMinusOne >> 1;
-     if( x.modPow( legendreExponent, q )!= BigInteger.ONE ) {
+     if( BigIntUtil.modPow( x, legendreExponent, q )!= BigInt.one ) {
        return null;
      }
 
      var u = qMinusOne >> 2;
-     var k = (u << 1) + BigInteger.ONE;
+     var k = (u << 1) + BigInt.one;
 
      var Q = x;
      var fourQ = (Q >> 2) % q;
@@ -73,18 +73,18 @@ class ECFieldElement extends ecc.ECFieldElementBase {
      var rand = new SecureRandom();
      do
      {
-       BigInteger P;
+       BigInt P;
        do {
-         P = rand.nextBigInteger( q.bitLength() );
-       } while( (P >= q)  || ( ( (P*P) - fourQ ).modPow( legendreExponent, q ) != qMinusOne ) );
+         P = rand.nextBigInteger( q.bitLength );
+       } while( (P >= q)  || ( BigIntUtil.modPow( (P*P) - fourQ, legendreExponent, q ) != qMinusOne ) );
 
-       List<BigInteger> result = _lucasSequence( q, P, Q, k );
+       List<BigInt> result = _lucasSequence( q, P, Q, k );
        U = result[0];
        V = result[1];
 
        if( ( (V*V) % q ) == fourQ ) {
          // Integer division by 2, mod q
-         if( V.testBit(0) ) {
+         if( BigIntUtil.testBit(V, 0) ) {
            V = V + q;
          }
 
@@ -94,26 +94,26 @@ class ECFieldElement extends ecc.ECFieldElementBase {
 
          return new ECFieldElement( q, V );
        }
-     } while( (U == BigInteger.ONE) || (U == qMinusOne) );
+     } while( (U == BigInt.one) || (U == qMinusOne) );
 
      return null;
   }
 
-  List<BigInteger> _lucasSequence( BigInteger p, BigInteger P, BigInteger Q, BigInteger k ) {
+  List<BigInt> _lucasSequence( BigInt p, BigInt P, BigInt Q, BigInt k ) {
 
-    var n = k.bitLength();
-    var s = k.lowestSetBit;
+    var n = k.bitLength;
+    var s = BigIntUtil.lowestSetBit(k);
 
-    BigInteger Uh = BigInteger.ONE;
-    BigInteger Vl = BigInteger.TWO;
-    BigInteger Vh = P;
-    BigInteger Ql = BigInteger.ONE;
-    BigInteger Qh = BigInteger.ONE;
+    BigInt Uh = BigInt.one;
+    BigInt Vl = BigInt.two;
+    BigInt Vh = P;
+    BigInt Ql = BigInt.one;
+    BigInt Qh = BigInt.one;
 
     for( var j=n-1 ; j>=(s+1) ; j-- ) {
       Ql = (Ql*Qh) % p;
 
-      if( k.testBit(j) ) {
+      if( BigIntUtil.testBit(k, j) ) {
         Qh = (Ql*Q) % p;
         Uh = (Uh*Vh) % p;
         Vl = ((Vh*Vl)-(P*Ql)) % p;
@@ -181,7 +181,7 @@ class ECPoint extends ecc.ECPointBase {
 
       int PC;
 
-      if( y.toBigInteger().testBit(0) ) {
+      if( BigIntUtil.testBit(y.toBigInteger(), 0) ) {
         PC = 0x03;
       } else {
         PC = 0x02;
@@ -252,8 +252,8 @@ class ECPoint extends ecc.ECPointBase {
       return this.curve.infinity;
     }
 
-    var TWO = curve.fromBigInteger(BigInteger.TWO);
-    var THREE = curve.fromBigInteger(BigInteger.THREE);
+    var TWO = curve.fromBigInt(BigInt.two);
+    var THREE = curve.fromBigInt(BigIntUtil.three);
     var gamma = ((x.square()*THREE)+curve.a)/(y*TWO);
 
     var x3 = gamma.square()-(x*TWO);
@@ -283,22 +283,22 @@ class ECPoint extends ecc.ECPointBase {
 /// Elliptic curve over Fp
 class ECCurve extends ecc.ECCurveBase {
 
-  final BigInteger q;
+  final BigInt q;
   ECPoint _infinity;
 
-  ECCurve( this.q, BigInteger a, BigInteger b ) : super(a,b) {
+  ECCurve( this.q, BigInt a, BigInt b ) : super(a,b) {
     _infinity = new ECPoint(this, null, null);
   }
 
-  int get fieldSize => q.bitLength();
+  int get fieldSize => q.bitLength;
   ECPoint get infinity => _infinity;
 
-  ECFieldElement fromBigInteger( BigInteger x ) => new ECFieldElement(this.q, x);
-  ECPoint createPoint(BigInteger x, BigInteger y, [bool withCompression=false] )
-    => new ECPoint(this, fromBigInteger(x), fromBigInteger(y), withCompression);
+  ECFieldElement fromBigInt( BigInt x ) => new ECFieldElement(this.q, x);
+  ECPoint createPoint(BigInt x, BigInt y, [bool withCompression=false] )
+    => new ECPoint(this, fromBigInt(x), fromBigInt(y), withCompression);
 
-  ECPoint decompressPoint(int yTilde, BigInteger X1) {
-    var x = fromBigInteger(X1);
+  ECPoint decompressPoint(int yTilde, BigInt X1) {
+    var x = fromBigInt(X1);
     var alpha = (x*((x*x)+a)) + b;
     ECFieldElement beta = alpha.sqrt();
 
@@ -311,11 +311,11 @@ class ECCurve extends ecc.ECCurveBase {
     }
 
     var betaValue = beta.toBigInteger();
-    var bit0 = betaValue.testBit(0) ? 1 : 0;
+    var bit0 = BigIntUtil.testBit(betaValue, 0) ? 1 : 0;
 
     if (bit0 != yTilde) {
       // Use the other root
-      beta = fromBigInteger(q-betaValue);
+      beta = fromBigInt(q-betaValue);
     }
 
     return new ECPoint( this, x, beta, true );
@@ -349,7 +349,7 @@ class _WNafPreCompInfo implements PreCompInfo {
  * Function implementing the WNAF (Window Non-Adjacent Form) multiplication algorithm. Multiplies [p]] by an integer [k] using
  * the Window NAF method.
  */
-ECPoint _WNafMultiplier(ECPoint p, BigInteger k, PreCompInfo preCompInfo) {
+ECPoint _WNafMultiplier(ECPoint p, BigInt k, PreCompInfo preCompInfo) {
 
   // Ignore empty PreCompInfo or PreCompInfo of incorrect type
   _WNafPreCompInfo wnafPreCompInfo = preCompInfo;
@@ -358,7 +358,7 @@ ECPoint _WNafMultiplier(ECPoint p, BigInteger k, PreCompInfo preCompInfo) {
   }
 
   // floor(log2(k))
-  var m = k.bitLength();
+  var m = k.bitLength;
 
   // width of the Window NAF
   var width;
@@ -476,7 +476,7 @@ ECPoint _WNafMultiplier(ECPoint p, BigInteger k, PreCompInfo preCompInfo) {
  * </code>, where the <code>k<sub>i</sub></code> denote the elements of the
  * returned <code>byte[]</code>.
  */
-List<int> _windowNaf(int width, BigInteger k) {
+List<int> _windowNaf(int width, BigInt k) {
 
   // The window NAF is at most 1 element longer than the binary
   // representation of the integer k. byte can be used instead of short or
@@ -484,11 +484,11 @@ List<int> _windowNaf(int width, BigInteger k) {
   // short or int. However, a width of more than 8 is not efficient for
   // m = log2(q) smaller than 2305 Bits. Note: Values for m larger than
   // 1000 Bits are currently not used in practice.
-  List<int> wnaf = new List<int>(k.bitLength() + 1);
+  List<int> wnaf = new List<int>(k.bitLength + 1);
 
-  // 2^width as short and BigInteger
+  // 2^width as short and BigInt
   int pow2wB = (1 << width);
-  BigInteger pow2wBI = new BigInteger(pow2wB);
+  BigInt pow2wBI = new BigInt.from(pow2wB);
 
   int i = 0;
 
@@ -496,17 +496,17 @@ List<int> _windowNaf(int width, BigInteger k) {
   int length = 0;
 
   // while k >= 1
-  while (k.signum() > 0) {
+  while (k.sign > 0) {
     // if k is odd
-    if (k.testBit(0) ) {
+    if (BigIntUtil.testBit(k, 0) ) {
       // k mod 2^width
-      BigInteger remainder = k.mod(pow2wBI);
+      BigInt remainder = k % pow2wBI;
 
       // if remainder > 2^(width - 1) - 1
-      if (remainder.testBit(width - 1)) {
-        wnaf[i] = remainder.intValue() - pow2wB;
+      if (BigIntUtil.testBit(remainder, width - 1)) {
+        wnaf[i] = remainder.toInt() - pow2wB;
       } else {
-        wnaf[i] = remainder.intValue();
+        wnaf[i] = remainder.toInt();
       }
 
       // convert to "Java byte"
@@ -517,14 +517,14 @@ List<int> _windowNaf(int width, BigInteger k) {
 
       // wnaf[i] is now in [-2^(width-1), 2^(width-1)-1]
 
-      k = k-new BigInteger(wnaf[i]);
+      k = k-new BigInt.from(wnaf[i]);
       length = i;
     } else {
       wnaf[i] = 0;
     }
 
     // k = k/2
-    k = k.shiftRight(1);
+    k = k >> 1;
     i++;
   }
 
@@ -536,8 +536,8 @@ List<int> _windowNaf(int width, BigInteger k) {
   return wnafShort;
 }
 
-Uint8List _x9IntegerToBytes( BigInteger s, int qLength ) {
-  Uint8List bytes = new Uint8List.fromList(s.toByteArray());
+Uint8List _x9IntegerToBytes( BigInt s, int qLength ) {
+  Uint8List bytes = BigIntUtil.toBytes(s);
 
   if( qLength < bytes.length ) {
     return bytes.sublist( bytes.length-qLength );

@@ -4,11 +4,10 @@
 
 library pointycastle.impl.key_generator.rsa_key_generator;
 
-import "package:bignum/bignum.dart";
-
 import "package:pointycastle/api.dart";
 import "package:pointycastle/asymmetric/api.dart";
 import "package:pointycastle/key_generators/api.dart";
+import 'package:pointycastle/src/bigint_util.dart';
 import "package:pointycastle/src/registry/registry.dart";
 
 class RSAKeyGenerator implements KeyGenerator {
@@ -35,13 +34,13 @@ class RSAKeyGenerator implements KeyGenerator {
       throw new ArgumentError("key bit strength cannot be smaller than 12");
     }
 
-    if (!_params.publicExponent.testBit(0)) {
+    if (!BigIntUtil.testBit(_params.publicExponent, 0)) {
       throw new ArgumentError("Public exponent cannot be even");
     }
   }
 
   AsymmetricKeyPair generateKeyPair() {
-    var p, q, n, e;
+    BigInt p, q, n, e;
 
     // p and q values should have a length of half the strength in bits
     var strength = _params.bitStrength;
@@ -58,15 +57,15 @@ class RSAKeyGenerator implements KeyGenerator {
     for ( ; ; ) {
       p = generateProbablePrime(pbitlength, 1, _random);
 
-      if (p.mod(e) == 1) {
+      if (p % e == BigInt.one) {
         continue;
       }
 
-      if (!p.isProbablePrime(_params.certainty)) {
+      if (!BigIntUtil.isProbablePrime(p, _params.certainty)) {
         continue;
       }
 
-      if (e.gcd(p - BigInteger.ONE) == 1) {
+      if (e.gcd(p - BigInt.one) == BigInt.one) {
         break;
       }
     }
@@ -78,32 +77,32 @@ class RSAKeyGenerator implements KeyGenerator {
       for ( ; ; ) {
         q = generateProbablePrime(pbitlength, 1, _random);
 
-        if ((q - p).abs().bitLength() < mindiffbits) {
+        if ((q - p).abs().bitLength < mindiffbits) {
           continue;
         }
 
-        if (q.mod(e) == 1) {
+        if ((q % e) == BigInt.one) {
           continue;
         }
 
-        if (!q.isProbablePrime(_params.certainty)) {
+        if (!BigIntUtil.isProbablePrime(q, _params.certainty)) {
           continue;
         }
 
-        if (e.gcd(q - BigInteger.ONE) == 1) {
+        if (e.gcd(q - BigInt.one) == BigInt.one) {
           break;
         }
       }
 
       // calculate the modulus
-      n = p.multiply(q);
+      n = p * q;
 
-      if (n.bitLength() == _params.bitStrength) {
+      if (n.bitLength == _params.bitStrength) {
         break;
       }
 
       // if we get here our primes aren't big enough, make the largest of the two p and try again
-      p = p.max(q);
+      p = p > q ? p : q;
     }
 
     // Swap p and q if necessary
@@ -114,8 +113,8 @@ class RSAKeyGenerator implements KeyGenerator {
     }
 
     // calculate the private exponent
-    var pSub1 = (p - BigInteger.ONE);
-    var qSub1 = (q - BigInteger.ONE);
+    var pSub1 = (p - BigInt.one);
+    var qSub1 = (q - BigInt.one);
     var phi = (pSub1 * qSub1);
     var d = e.modInverse(phi);
 
@@ -124,28 +123,28 @@ class RSAKeyGenerator implements KeyGenerator {
 
 }
 
-BigInteger generateProbablePrime(int bitLength, int certainty, SecureRandom rnd) {
-  var candidate;
+BigInt generateProbablePrime(int bitLength, int certainty, SecureRandom rnd) {
+  BigInt candidate;
 
   if (bitLength < 2) {
-    candidate = new BigInteger(1);
+    candidate = BigInt.one;
   } else {
     candidate = rnd.nextBigInteger(bitLength);
 
     // force MSB set
-    if (!candidate.testBit(bitLength - 1)) {
-      candidate.bitwiseTo(BigInteger.ONE.shiftLeft(bitLength - 1), (x, y) => x | y, candidate);
+    if (!BigIntUtil.testBit(candidate, bitLength - 1)) {
+      candidate = candidate | (BigInt.one << (bitLength - 1));
     }
 
     // force odd
-    if (candidate.isEven()) {
-      candidate.dAddOffset(1, 0);
+    if (candidate.isEven) {
+      candidate += BigInt.one;
     }
 
-    while (!candidate.isProbablePrime(certainty)) {
-      candidate.dAddOffset(2, 0);
-      if (candidate.bitLength() > bitLength) {
-        candidate.subTo(BigInteger.ONE.shiftLeft(bitLength - 1), candidate);
+    while (!BigIntUtil.isProbablePrime(candidate, certainty)) {
+      candidate += BigInt.two;
+      if (candidate.bitLength > bitLength) {
+        candidate -= BigInt.one << (bitLength - 1);
       }
     }
   }
