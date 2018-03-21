@@ -4,7 +4,7 @@
 
 library pointycastle.src.registry;
 
-import "package:quiver_pattern/regexp.dart";
+import "package:quiver/pattern.dart";
 
 import "registry_disabled.dart"
   if (dart.library.mirrors) "registry_reflectable.dart";
@@ -46,13 +46,13 @@ class DynamicFactoryConfig extends FactoryConfig {
   /// The part after the prefix will be in `match.group(1)`.
   DynamicFactoryConfig.prefix(
       Type type, String prefix, DynamicConstructorFactory factory)
-      : this.regex(type, "^${escapeRegExp(prefix)}(.+)\$", factory);
+      : this.regex(type, "^${escapeRegex(prefix)}(.+)\$", factory);
 
   /// A dynamic registry that matches by suffix.
   /// The part before the suffix will be in `match.group(1)`.
   DynamicFactoryConfig.suffix(
       Type type, String suffix, DynamicConstructorFactory factory)
-      : this.regex(type, "^(.+)${escapeRegExp(suffix)}\$", factory);
+      : this.regex(type, "^(.+)${escapeRegex(suffix)}\$", factory);
 
   /// Invokes the factory when it matches. Else returns null.
   RegistrableConstructor tryFactory(String algorithmName) {

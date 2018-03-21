@@ -4,7 +4,7 @@
 library pointycastle.src.registry.impl.reflectable;
 
 import "package:reflectable/reflectable.dart";
-import "package:quiver_collection/collection.dart";
+import 'package:quiver/collection.dart';
 
 import "package:pointycastle/api.dart";
 
