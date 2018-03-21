@@ -125,7 +125,7 @@ class ECDSASigner implements Signer {
     return new ECSignature(r,s);
   }
 
-  bool verifySignature(Uint8List message, ECSignature signature) {
+  bool verifySignature(Uint8List message, covariant ECSignature signature) {
     message = _hashMessageIfNeeded(message);
 
     var n = _pbkey.parameters.n;
@@ -318,7 +318,7 @@ class _RFC6979KCalculator implements _KCalculator {
 
       var k = _bitsToInt(t);
 
-      if ((k == 0) || (k >= _n)) {
+      if ((k.sign == 0) || (k >= _n)) {
         _mac.update(_V, 0, _V.length);
         _mac.updateByte(0x00);
         _mac.doFinal(_K, 0);

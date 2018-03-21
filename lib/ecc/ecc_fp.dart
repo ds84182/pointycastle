@@ -246,7 +246,7 @@ class ECPoint extends ecc.ECPointBase {
       return this;
     }
 
-    if( y.toBigInteger() == 0 ) {
+    if( y.toBigInteger().sign == 0 ) {
       // if y1 == 0, then (x1, y1) == (x1, -y1)
       // and hence this = -this and thus 2(x1, y1) == infinity
       return this.curve.infinity;
@@ -349,7 +349,8 @@ class _WNafPreCompInfo implements PreCompInfo {
  * Function implementing the WNAF (Window Non-Adjacent Form) multiplication algorithm. Multiplies [p]] by an integer [k] using
  * the Window NAF method.
  */
-ECPoint _WNafMultiplier(ECPoint p, BigInt k, PreCompInfo preCompInfo) {
+ECPoint _WNafMultiplier(ecc.ECPointBase _p, BigInt k, PreCompInfo preCompInfo) {
+  final p = _p as ECPoint;
 
   // Ignore empty PreCompInfo or PreCompInfo of incorrect type
   _WNafPreCompInfo wnafPreCompInfo = preCompInfo;
